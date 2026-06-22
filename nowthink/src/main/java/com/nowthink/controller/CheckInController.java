@@ -4,6 +4,7 @@ import com.nowthink.model.CheckIn;
 import com.nowthink.repository.CheckInRepository;
 import com.nowthink.service.PatternService;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
@@ -15,15 +16,17 @@ import java.util.List;
 public class CheckInController {
 
     private final ChatClient chatClient;
+    private final ChatClient scoringClient;
     private final CheckInRepository checkInRepository;
     private final PatternService patternService;
 
-    public CheckInController(ChatClient.Builder builder,
+    public CheckInController(OpenAiChatModel model,
                              CheckInRepository checkInRepository,
                              PatternService patternService) {
         this.checkInRepository = checkInRepository;
         this.patternService = patternService;
-        this.chatClient = builder
+
+        this.chatClient = ChatClient.builder(model)
                 .defaultSystem("""
                 You are Nowthink — a quiet, thoughtful companion that helps people 
                 see patterns in themselves they never knew existed.
@@ -35,6 +38,28 @@ public class CheckInController {
                 Keep responses short — 2 to 3 sentences maximum.
                 """)
                 .build();
+
+        this.scoringClient = ChatClient.builder(model)
+                .defaultSystem("""
+                You are an energy scorer. Given a person's message about their day,
+                respond with ONLY a single integer from 1 to 10 representing their energy level.
+                1 = completely drained, 10 = highly energized.
+                No explanation. No punctuation. Just the number.
+                """)
+                .build();
+    }
+
+    private int scoreEnergy(String message) {
+        try {
+            String score = scoringClient.prompt()
+                    .user(message)
+                    .call()
+                    .content()
+                    .trim();
+            return Integer.parseInt(score.replaceAll("[^0-9]", ""));
+        } catch (Exception e) {
+            return 5;
+        }
     }
 
     @PostMapping
@@ -47,6 +72,7 @@ public class CheckInController {
         CheckIn checkIn = new CheckIn();
         checkIn.setUserMessage(message);
         checkIn.setNowthinkResponse(response);
+        checkIn.setEnergyScore(scoreEnergy(message));
         checkInRepository.save(checkIn);
 
         return response;
@@ -65,6 +91,7 @@ public class CheckInController {
                     CheckIn checkIn = new CheckIn();
                     checkIn.setUserMessage(message);
                     checkIn.setNowthinkResponse(fullResponse.toString());
+                    checkIn.setEnergyScore(scoreEnergy(message));
                     checkInRepository.save(checkIn);
                 });
     }
@@ -77,5 +104,10 @@ public class CheckInController {
     @GetMapping("/patterns")
     public String getPatterns() {
         return patternService.detectPatterns();
+    }
+
+    @GetMapping("/timeline")
+    public List<CheckIn> getTimeline() {
+        return checkInRepository.findAllByOrderByCreatedAtAsc();
     }
 }

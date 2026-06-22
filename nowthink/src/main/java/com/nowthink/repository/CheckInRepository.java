@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface CheckInRepository extends JpaRepository<CheckIn, Long> {
     List<CheckIn> findAllByOrderByCreatedAtDesc();
+    List<CheckIn> findAllByOrderByCreatedAtAsc();
 }

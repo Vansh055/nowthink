@@ -19,6 +19,8 @@ public class CheckIn {
     @Column(columnDefinition = "TEXT")
     private String nowthinkResponse;
 
+    private Integer energyScore;
+
     private LocalDateTime createdAt;
 
     @PrePersist
