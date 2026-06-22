@@ -1,5 +1,7 @@
 package com.nowthink.controller;
 
+import com.nowthink.model.CheckIn;
+import com.nowthink.repository.CheckInRepository;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.*;
 
@@ -9,8 +11,10 @@ import org.springframework.web.bind.annotation.*;
 public class CheckInController {
 
     private final ChatClient chatClient;
+    private final CheckInRepository checkInRepository;
 
-    public CheckInController(ChatClient.Builder builder) {
+    public CheckInController(ChatClient.Builder builder, CheckInRepository checkInRepository) {
+        this.checkInRepository = checkInRepository;
         this.chatClient = builder
                 .defaultSystem("""
                 You are Nowthink — a quiet, thoughtful companion that helps people 
@@ -27,9 +31,21 @@ public class CheckInController {
 
     @PostMapping
     public String checkIn(@RequestBody String message) {
-        return chatClient.prompt()
+        String response = chatClient.prompt()
                 .user(message)
                 .call()
                 .content();
+
+        CheckIn checkIn = new CheckIn();
+        checkIn.setUserMessage(message);
+        checkIn.setNowthinkResponse(response);
+        checkInRepository.save(checkIn);
+
+        return response;
+    }
+
+    @GetMapping("/history")
+    public java.util.List<CheckIn> getHistory() {
+        return checkInRepository.findAllByOrderByCreatedAtDesc();
     }
 }
