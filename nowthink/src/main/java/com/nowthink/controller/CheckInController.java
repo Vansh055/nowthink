@@ -5,6 +5,7 @@ import com.nowthink.repository.CheckInRepository;
 import com.nowthink.service.PatternService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -49,6 +50,23 @@ public class CheckInController {
         checkInRepository.save(checkIn);
 
         return response;
+    }
+
+    @PostMapping(value = "/stream", produces = "text/event-stream")
+    public Flux<String> checkInStream(@RequestBody String message) {
+        StringBuilder fullResponse = new StringBuilder();
+
+        return chatClient.prompt()
+                .user(message)
+                .stream()
+                .content()
+                .doOnNext(fullResponse::append)
+                .doOnComplete(() -> {
+                    CheckIn checkIn = new CheckIn();
+                    checkIn.setUserMessage(message);
+                    checkIn.setNowthinkResponse(fullResponse.toString());
+                    checkInRepository.save(checkIn);
+                });
     }
 
     @GetMapping("/history")
