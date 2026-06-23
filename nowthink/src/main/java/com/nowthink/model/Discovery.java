@@ -1,28 +1,30 @@
 package com.nowthink.model;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "checkins")
-public class CheckIn {
+@Table(name = "discoveries")
+public class Discovery {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(columnDefinition = "TEXT")
-    private String userMessage;
+    private String claim;
 
     @Column(columnDefinition = "TEXT")
-    private String nowthinkResponse;
+    private String evidenceFor;
 
-    @JsonProperty("energyScore")
-    private Integer energyScore;
+    @Column(columnDefinition = "TEXT")
+    private String evidenceAgainst;
 
+    private Integer confidenceScore;
+    private String status;
+    private String discoveryType;
     private LocalDateTime createdAt;
 
     @PrePersist
