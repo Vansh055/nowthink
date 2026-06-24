@@ -2,6 +2,7 @@ package com.nowthink.controller;
 
 import com.nowthink.model.Observation;
 import com.nowthink.repository.ObservationRepository;
+import com.nowthink.service.ContradictionEngine;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.http.ResponseEntity;
@@ -20,12 +21,15 @@ public class ObservationController {
     private static final Logger log = LoggerFactory.getLogger(ObservationController.class);
 
     private final ObservationRepository observationRepository;
+    private final ContradictionEngine contradictionEngine;
     private final ChatClient extractorClient;
     private final ChatClient energyClient;
 
     public ObservationController(ObservationRepository observationRepository,
+                                 ContradictionEngine contradictionEngine,
                                  OpenAiChatModel model) {
         this.observationRepository = observationRepository;
+        this.contradictionEngine = contradictionEngine;
 
         this.extractorClient = ChatClient.builder(model)
                 .defaultSystem("""
@@ -83,6 +87,16 @@ public class ObservationController {
             obs.setExtractedTheme(theme);
             obs.setEnergyScore(energy);
             observationRepository.save(obs);
+
+            // Run contradiction check asynchronously so it doesn't block the response
+            final Observation savedObs = obs;
+            new Thread(() -> {
+                try {
+                    contradictionEngine.checkAndUpdate(savedObs);
+                } catch (Exception e) {
+                    log.error("Contradiction engine error: {}", e.getMessage());
+                }
+            }).start();
 
             long count = observationRepository.count();
 
