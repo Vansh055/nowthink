@@ -2,11 +2,12 @@ package com.nowthink.controller;
 
 import com.nowthink.model.Observation;
 import com.nowthink.repository.ObservationRepository;
-import com.nowthink.service.DiscoveryEngine;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,8 @@ import java.util.Map;
 @RequestMapping("/api/observe")
 @CrossOrigin(origins = "*")
 public class ObservationController {
+
+    private static final Logger log = LoggerFactory.getLogger(ObservationController.class);
 
     private final ObservationRepository observationRepository;
     private final ChatClient extractorClient;
@@ -51,18 +54,28 @@ public class ObservationController {
 
             String theme = "Unnamed observation";
             try {
-                theme = extractorClient.prompt().user(rawText).call().content().trim();
+                log.info("Calling extractor AI for: {}", rawText.substring(0, Math.min(50, rawText.length())));
+                String result = extractorClient.prompt().user(rawText).call().content().trim();
+                log.info("Extractor returned: {}", result);
+                if (result != null && !result.isEmpty()) {
+                    theme = result;
+                }
             } catch (Exception e) {
-                // keep default theme
+                log.error("Extractor AI failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
             }
 
             int energy = 5;
             try {
+                log.info("Calling energy scorer AI");
                 String raw = energyClient.prompt().user(rawText).call().content().trim();
-                energy = Integer.parseInt(raw.replaceAll("[^0-9]", "").substring(0, 1));
-                energy = Math.min(10, Math.max(1, energy));
+                log.info("Energy scorer returned: {}", raw);
+                String digits = raw.replaceAll("[^0-9]", "");
+                if (!digits.isEmpty()) {
+                    energy = Integer.parseInt(digits.substring(0, Math.min(2, digits.length())));
+                    energy = Math.min(10, Math.max(1, energy));
+                }
             } catch (Exception e) {
-                // keep default energy
+                log.error("Energy AI failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
             }
 
             Observation obs = new Observation();
@@ -81,6 +94,7 @@ public class ObservationController {
                     "readyForDiscovery", count >= 3
             ));
         } catch (Exception e) {
+            log.error("Full observation error: ", e);
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Unknown error"));
         }
