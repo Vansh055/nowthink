@@ -16,8 +16,7 @@ public class DiscoveryEngine {
 
     private final ObservationRepository observationRepository;
     private final DiscoveryRepository discoveryRepository;
-    private final ChatClient hypothesisClient;
-    private final ChatClient evidenceClient;
+    private final ChatClient discoveryClient;
     private final ChatClient confidenceClient;
 
     public DiscoveryEngine(ObservationRepository observationRepository,
@@ -26,47 +25,25 @@ public class DiscoveryEngine {
         this.observationRepository = observationRepository;
         this.discoveryRepository = discoveryRepository;
 
-        this.hypothesisClient = ChatClient.builder(model)
+        this.discoveryClient = ChatClient.builder(model)
                 .defaultSystem("""
-                You are a pattern detective analyzing a person's observations over time.
+                You are a pattern detective analyzing a person's observations.
                 
-                Given a list of observations, generate ONE hypothesis about this person
-                that they probably don't know about themselves.
+                Given observations, generate ONE discovery about this person.
                 
-                Rules:
-                - Be specific, not generic
-                - Reference actual patterns from the observations
-                - Format your response as JSON exactly like this:
-                {
-                  "claim": "one sentence hypothesis",
-                  "discoveryType": "Pattern|Contradiction|BlindSpot|Evolution",
-                  "evidenceFor": "observation ids that support this, comma separated",
-                  "evidenceAgainst": "observation ids that contradict this, comma separated"
-                }
-                - Only return JSON. No explanation. No markdown.
-                """)
-                .build();
-
-        this.evidenceClient = ChatClient.builder(model)
-                .defaultSystem("""
-                You are an evidence analyst.
-                Given a hypothesis and a list of observations with their IDs,
-                find which observations support the hypothesis and which contradict it.
-                
-                Return ONLY JSON:
-                {
-                  "evidenceFor": "quoted text from supporting observations",
-                  "evidenceAgainst": "quoted text from contradicting observations"
-                }
+                Respond ONLY with this exact format, no extra text, no markdown:
+                CLAIM: [one sentence hypothesis about the person]
+                TYPE: [exactly one of: Pattern, Contradiction, BlindSpot, Evolution]
+                EVIDENCE_FOR: [quote directly from observations that support the claim]
+                EVIDENCE_AGAINST: [quote directly from observations that contradict, or write NONE]
                 """)
                 .build();
 
         this.confidenceClient = ChatClient.builder(model)
                 .defaultSystem("""
                 You are a confidence scorer.
-                Given a hypothesis, supporting evidence, and contradicting evidence,
-                return ONLY a single integer from 0 to 100 representing confidence.
-                No explanation. Just the number.
+                Given a hypothesis and evidence, return ONLY a number from 0 to 100.
+                No words. No explanation. Just the number.
                 """)
                 .build();
     }
@@ -76,7 +53,7 @@ public class DiscoveryEngine {
 
         if (observations.size() < 3) {
             Discovery d = new Discovery();
-            d.setClaim("Not enough observations yet. Add " + (3 - observations.size()) + " more to unlock your first discovery.");
+            d.setClaim("Add " + (3 - observations.size()) + " more observations to unlock your first discovery.");
             d.setStatus("pending");
             d.setConfidenceScore(0);
             d.setDiscoveryType("none");
@@ -86,64 +63,72 @@ public class DiscoveryEngine {
         }
 
         String observationText = observations.stream()
-                .map(o -> "ID " + o.getId() + ": " + o.getRawText())
+                .map(o -> "- " + o.getRawText())
                 .collect(Collectors.joining("\n"));
 
-        String hypothesisJson = hypothesisClient.prompt()
-                .user("Here are the observations:\n\n" + observationText)
-                .call()
-                .content();
-
-        String claim = extractJson(hypothesisJson, "claim");
-        String discoveryType = extractJson(hypothesisJson, "discoveryType");
-
-        String evidenceJson = evidenceClient.prompt()
-                .user("Hypothesis: " + claim + "\n\nObservations:\n" + observationText)
-                .call()
-                .content();
-
-        String evidenceFor = extractJson(evidenceJson, "evidenceFor");
-        String evidenceAgainst = extractJson(evidenceJson, "evidenceAgainst");
-
-        String confidenceRaw = confidenceClient.prompt()
-                .user("Hypothesis: " + claim + "\nSupporting: " + evidenceFor + "\nContradicting: " + evidenceAgainst)
-                .call()
-                .content()
-                .trim();
-
-        int confidence = 50;
         try {
-            confidence = Integer.parseInt(confidenceRaw.replaceAll("[^0-9]", ""));
-            confidence = Math.min(100, Math.max(0, confidence));
-        } catch (Exception ignored) {}
+            String response = discoveryClient.prompt()
+                    .user("Observations:\n" + observationText)
+                    .call()
+                    .content();
 
-        String status = confidence >= 60 ? "Supported" : confidence >= 40 ? "Investigating" : "Refuted";
+            String claim = extractField(response, "CLAIM:");
+            String type = extractField(response, "TYPE:");
+            String evidenceFor = extractField(response, "EVIDENCE_FOR:");
+            String evidenceAgainst = extractField(response, "EVIDENCE_AGAINST:");
 
-        Discovery discovery = new Discovery();
-        discovery.setClaim(claim);
-        discovery.setDiscoveryType(discoveryType);
-        discovery.setEvidenceFor(evidenceFor);
-        discovery.setEvidenceAgainst(evidenceAgainst);
-        discovery.setConfidenceScore(confidence);
-        discovery.setStatus(status);
-        discoveryRepository.save(discovery);
+            if (claim.isEmpty()) claim = "A pattern was detected but could not be parsed clearly.";
+            if (type.isEmpty()) type = "Pattern";
+            if (evidenceAgainst.equalsIgnoreCase("NONE")) evidenceAgainst = "";
 
-        return discovery;
+            int confidence = 60;
+            try {
+                String confRaw = confidenceClient.prompt()
+                        .user("Hypothesis: " + claim + "\nFor: " + evidenceFor + "\nAgainst: " + evidenceAgainst)
+                        .call()
+                        .content()
+                        .trim();
+                confidence = Integer.parseInt(confRaw.replaceAll("[^0-9]", ""));
+                confidence = Math.min(100, Math.max(0, confidence));
+            } catch (Exception ignored) {}
+
+            String status = confidence >= 60 ? "Supported" : confidence >= 40 ? "Investigating" : "Refuted";
+
+            Discovery discovery = new Discovery();
+            discovery.setClaim(claim);
+            discovery.setDiscoveryType(type);
+            discovery.setEvidenceFor(evidenceFor);
+            discovery.setEvidenceAgainst(evidenceAgainst);
+            discovery.setConfidenceScore(confidence);
+            discovery.setStatus(status);
+            discoveryRepository.save(discovery);
+
+            return discovery;
+
+        } catch (Exception e) {
+            Discovery d = new Discovery();
+            d.setClaim("Discovery generation failed: " + e.getMessage());
+            d.setStatus("error");
+            d.setConfidenceScore(0);
+            d.setDiscoveryType("none");
+            d.setEvidenceFor("");
+            d.setEvidenceAgainst("");
+            return d;
+        }
     }
 
     public List<Discovery> getAllDiscoveries() {
         return discoveryRepository.findAllByOrderByCreatedAtDesc();
     }
 
-    private String extractJson(String json, String key) {
+    private String extractField(String response, String field) {
         try {
-            String clean = json.replaceAll("```json", "").replaceAll("```", "").trim();
-            int keyIndex = clean.indexOf("\"" + key + "\"");
-            if (keyIndex == -1) return "";
-            int colonIndex = clean.indexOf(":", keyIndex);
-            int quoteStart = clean.indexOf("\"", colonIndex + 1);
-            int quoteEnd = clean.indexOf("\"", quoteStart + 1);
-            return clean.substring(quoteStart + 1, quoteEnd);
+            int start = response.indexOf(field);
+            if (start == -1) return "";
+            int valueStart = start + field.length();
+            int nextLine = response.indexOf("\n", valueStart);
+            if (nextLine == -1) nextLine = response.length();
+            return response.substring(valueStart, nextLine).trim();
         } catch (Exception e) {
             return "";
         }
