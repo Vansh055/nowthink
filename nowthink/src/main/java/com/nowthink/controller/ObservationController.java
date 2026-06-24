@@ -3,6 +3,7 @@ package com.nowthink.controller;
 import com.nowthink.model.Observation;
 import com.nowthink.repository.ObservationRepository;
 import com.nowthink.service.ContradictionEngine;
+import com.nowthink.service.ThoughtEvolutionEngine;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.http.ResponseEntity;
@@ -22,14 +23,17 @@ public class ObservationController {
 
     private final ObservationRepository observationRepository;
     private final ContradictionEngine contradictionEngine;
+    private final ThoughtEvolutionEngine thoughtEvolutionEngine;
     private final ChatClient extractorClient;
     private final ChatClient energyClient;
 
     public ObservationController(ObservationRepository observationRepository,
                                  ContradictionEngine contradictionEngine,
+                                 ThoughtEvolutionEngine thoughtEvolutionEngine,
                                  OpenAiChatModel model) {
         this.observationRepository = observationRepository;
         this.contradictionEngine = contradictionEngine;
+        this.thoughtEvolutionEngine = thoughtEvolutionEngine;
 
         this.extractorClient = ChatClient.builder(model)
                 .defaultSystem("""
@@ -70,9 +74,7 @@ public class ObservationController {
 
             int energy = 5;
             try {
-                log.info("Calling energy scorer AI");
                 String raw = energyClient.prompt().user(rawText).call().content().trim();
-                log.info("Energy scorer returned: {}", raw);
                 String digits = raw.replaceAll("[^0-9]", "");
                 if (!digits.isEmpty()) {
                     energy = Integer.parseInt(digits.substring(0, Math.min(2, digits.length())));
@@ -88,13 +90,17 @@ public class ObservationController {
             obs.setEnergyScore(energy);
             observationRepository.save(obs);
 
-            // Run contradiction check asynchronously so it doesn't block the response
             final Observation savedObs = obs;
             new Thread(() -> {
                 try {
                     contradictionEngine.checkAndUpdate(savedObs);
                 } catch (Exception e) {
                     log.error("Contradiction engine error: {}", e.getMessage());
+                }
+                try {
+                    thoughtEvolutionEngine.extractAndStore(savedObs);
+                } catch (Exception e) {
+                    log.error("Thought evolution engine error: {}", e.getMessage());
                 }
             }).start();
 
