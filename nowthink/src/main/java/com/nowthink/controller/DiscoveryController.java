@@ -1,7 +1,9 @@
 package com.nowthink.controller;
 
 import com.nowthink.model.Discovery;
+import com.nowthink.repository.DiscoveryRepository;
 import com.nowthink.service.DiscoveryEngine;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -12,9 +14,12 @@ import java.util.List;
 public class DiscoveryController {
 
     private final DiscoveryEngine discoveryEngine;
+    private final DiscoveryRepository discoveryRepository;
 
-    public DiscoveryController(DiscoveryEngine discoveryEngine) {
+    public DiscoveryController(DiscoveryEngine discoveryEngine,
+                               DiscoveryRepository discoveryRepository) {
         this.discoveryEngine = discoveryEngine;
+        this.discoveryRepository = discoveryRepository;
     }
 
     @PostMapping("/generate")
@@ -25,5 +30,12 @@ public class DiscoveryController {
     @GetMapping
     public List<Discovery> getAllDiscoveries() {
         return discoveryEngine.getAllDiscoveries();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getDiscovery(@PathVariable Long id) {
+        return discoveryRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 }
