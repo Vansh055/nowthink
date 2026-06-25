@@ -60,11 +60,6 @@
 			<artifactId>spring-ai-starter-model-openai</artifactId>
 		</dependency>
 
-		<!-- Spring Mail -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-mail</artifactId>
-		</dependency>
 
 		<!-- PostgreSQL -->
 		<dependency>
