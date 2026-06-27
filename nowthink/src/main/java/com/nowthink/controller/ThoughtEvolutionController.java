@@ -2,6 +2,9 @@ package com.nowthink.controller;
 
 import com.nowthink.model.ThoughtEvolution;
 import com.nowthink.service.ThoughtEvolutionEngine;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -9,7 +12,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/evolution")
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "*", allowCredentials = "true")
 public class ThoughtEvolutionController {
 
     private final ThoughtEvolutionEngine evolutionEngine;
@@ -19,13 +22,22 @@ public class ThoughtEvolutionController {
     }
 
     @GetMapping
-    public List<ThoughtEvolution> getAllEvolutions() {
-        return evolutionEngine.getAllEvolutions();
+    public ResponseEntity<?> getAllEvolutions(@AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        }
+        String userId = principal.getAttribute("sub");
+        return ResponseEntity.ok(evolutionEngine.getAllEvolutions(userId));
     }
 
     @GetMapping("/{theme}")
-    public List<ThoughtEvolution> getByTheme(@PathVariable String theme) {
-        return evolutionEngine.getEvolutionByTheme(theme);
+    public ResponseEntity<?> getByTheme(@PathVariable String theme,
+                                        @AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        }
+        String userId = principal.getAttribute("sub");
+        return ResponseEntity.ok(evolutionEngine.getEvolutionByTheme(userId, theme));
     }
 
     @GetMapping("/themes")

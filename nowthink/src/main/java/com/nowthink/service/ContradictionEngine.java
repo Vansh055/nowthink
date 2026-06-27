@@ -26,22 +26,19 @@ public class ContradictionEngine {
         this.contradictionClient = ChatClient.builder(model)
                 .defaultSystem("""
                 You are a contradiction detector.
-                
                 Given a hypothesis (claim) and a new observation, determine if the observation
                 contradicts the hypothesis.
-                
                 Reply with ONLY one word:
                 YES — if the observation clearly contradicts the hypothesis
                 NO — if it does not contradict
-                
                 No explanation. No punctuation. Just YES or NO.
                 """)
                 .build();
     }
 
-    public void checkAndUpdate(Observation newObservation) {
+    public void checkAndUpdate(Observation newObservation, String userId) {
         List<Discovery> supportedDiscoveries = discoveryRepository
-                .findAllByOrderByCreatedAtDesc()
+                .findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
                 .filter(d -> "Supported".equals(d.getStatus()))
                 .toList();
@@ -68,12 +65,10 @@ public class ContradictionEngine {
 
                     discovery.setEvidenceAgainst(updatedEvidence);
                     discovery.setStatus("Investigating");
-
                     int newConfidence = Math.max(0, discovery.getConfidenceScore() - 20);
                     discovery.setConfidenceScore(newConfidence);
-
                     discoveryRepository.save(discovery);
-                    log.info("Case #{} moved to Investigating due to contradiction", discovery.getId());
+                    log.info("Case #{} moved to Investigating", discovery.getId());
                 }
             } catch (Exception e) {
                 log.error("Contradiction check failed for case #{}: {}", discovery.getId(), e.getMessage());

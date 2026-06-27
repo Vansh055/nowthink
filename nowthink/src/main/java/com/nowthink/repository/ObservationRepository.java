@@ -7,7 +7,7 @@ import java.util.List;
 
 @Repository
 public interface ObservationRepository extends JpaRepository<Observation, Long> {
-    List<Observation> findAllByOrderByCreatedAtDesc();
-    List<Observation> findAllByOrderByCreatedAtAsc();
-    long count();
+    List<Observation> findByUserIdOrderByCreatedAtDesc(String userId);
+    List<Observation> findByUserIdOrderByCreatedAtAsc(String userId);
+    long countByUserId(String userId);
 }

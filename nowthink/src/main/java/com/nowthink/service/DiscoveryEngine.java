@@ -28,9 +28,7 @@ public class DiscoveryEngine {
         this.discoveryClient = ChatClient.builder(model)
                 .defaultSystem("""
                 You are a pattern detective analyzing a person's observations.
-                
                 Given observations, generate ONE discovery about this person.
-                
                 Respond ONLY with this exact format, no extra text, no markdown:
                 CLAIM: [one sentence hypothesis about the person]
                 TYPE: [exactly one of: Pattern, Contradiction, BlindSpot, Evolution]
@@ -48,11 +46,13 @@ public class DiscoveryEngine {
                 .build();
     }
 
-    public Discovery generateDiscovery() {
-        List<Observation> observations = observationRepository.findAllByOrderByCreatedAtAsc();
+    public Discovery generateDiscovery(String userId) {
+        List<Observation> observations = observationRepository
+                .findByUserIdOrderByCreatedAtAsc(userId);
 
         if (observations.size() < 3) {
             Discovery d = new Discovery();
+            d.setUserId(userId);
             d.setClaim("Add " + (3 - observations.size()) + " more observations to unlock your first discovery.");
             d.setStatus("pending");
             d.setConfidenceScore(0);
@@ -95,6 +95,7 @@ public class DiscoveryEngine {
             String status = confidence >= 60 ? "Supported" : confidence >= 40 ? "Investigating" : "Refuted";
 
             Discovery discovery = new Discovery();
+            discovery.setUserId(userId);
             discovery.setClaim(claim);
             discovery.setDiscoveryType(type);
             discovery.setEvidenceFor(evidenceFor);
@@ -107,6 +108,7 @@ public class DiscoveryEngine {
 
         } catch (Exception e) {
             Discovery d = new Discovery();
+            d.setUserId(userId);
             d.setClaim("Discovery generation failed: " + e.getMessage());
             d.setStatus("error");
             d.setConfidenceScore(0);
@@ -117,8 +119,8 @@ public class DiscoveryEngine {
         }
     }
 
-    public List<Discovery> getAllDiscoveries() {
-        return discoveryRepository.findAllByOrderByCreatedAtDesc();
+    public List<Discovery> getAllDiscoveries(String userId) {
+        return discoveryRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
     private String extractField(String response, String field) {

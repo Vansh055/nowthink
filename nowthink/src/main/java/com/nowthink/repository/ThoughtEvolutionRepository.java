@@ -7,6 +7,6 @@ import java.util.List;
 
 @Repository
 public interface ThoughtEvolutionRepository extends JpaRepository<ThoughtEvolution, Long> {
-    List<ThoughtEvolution> findByThemeOrderByRecordedAtAsc(String theme);
-    List<ThoughtEvolution> findAllByOrderByRecordedAtDesc();
+    List<ThoughtEvolution> findByUserIdAndThemeOrderByRecordedAtAsc(String userId, String theme);
+    List<ThoughtEvolution> findByUserIdOrderByRecordedAtDesc(String userId);
 }

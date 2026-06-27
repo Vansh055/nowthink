@@ -32,10 +32,6 @@ public class ThoughtEvolutionEngine {
                 Start with "I" — first person.
                 Maximum 10 words.
                 Return ONLY the belief sentence. Nothing else.
-                Examples:
-                - "I am afraid of failing before I start"
-                - "I feel capable when I focus"
-                - "I doubt my own decisions constantly"
                 """)
                 .build();
 
@@ -49,15 +45,13 @@ public class ThoughtEvolutionEngine {
                 .build();
     }
 
-    public void extractAndStore(Observation observation) {
+    public void extractAndStore(Observation observation, String userId) {
         try {
             String belief = beliefExtractor.prompt()
                     .user(observation.getRawText())
                     .call()
                     .content()
                     .trim();
-
-            log.info("Extracted belief: {}", belief);
 
             String theme = themeClassifier.prompt()
                     .user(belief)
@@ -66,9 +60,8 @@ public class ThoughtEvolutionEngine {
                     .trim()
                     .toLowerCase();
 
-            log.info("Classified theme: {}", theme);
-
             ThoughtEvolution evolution = new ThoughtEvolution();
+            evolution.setUserId(userId);
             evolution.setBelief(belief);
             evolution.setTheme(theme);
             evolution.setSourceObservation(observation.getRawText());
@@ -79,11 +72,11 @@ public class ThoughtEvolutionEngine {
         }
     }
 
-    public List<ThoughtEvolution> getEvolutionByTheme(String theme) {
-        return evolutionRepository.findByThemeOrderByRecordedAtAsc(theme);
+    public List<ThoughtEvolution> getEvolutionByTheme(String userId, String theme) {
+        return evolutionRepository.findByUserIdAndThemeOrderByRecordedAtAsc(userId, theme);
     }
 
-    public List<ThoughtEvolution> getAllEvolutions() {
-        return evolutionRepository.findAllByOrderByRecordedAtDesc();
+    public List<ThoughtEvolution> getAllEvolutions(String userId) {
+        return evolutionRepository.findByUserIdOrderByRecordedAtDesc(userId);
     }
 }

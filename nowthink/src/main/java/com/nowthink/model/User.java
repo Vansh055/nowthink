@@ -6,23 +6,19 @@ import java.time.LocalDateTime;
 
 @Entity
 @Data
-@Table(name = "observations")
-public class Observation {
+@Table(name = "users")
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String userId;
+    @Column(unique = true)
+    private String googleId;
 
-    @Column(columnDefinition = "TEXT")
-    private String rawText;
-
-    @Column(columnDefinition = "TEXT")
-    private String extractedTheme;
-
-    private String emotionalTone;
-    private Integer energyScore;
+    private String email;
+    private String name;
+    private String picture;
     private LocalDateTime createdAt;
 
     @PrePersist

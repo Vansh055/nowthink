@@ -7,5 +7,5 @@ import java.util.List;
 
 @Repository
 public interface DiscoveryRepository extends JpaRepository<Discovery, Long> {
-    List<Discovery> findAllByOrderByCreatedAtDesc();
+    List<Discovery> findByUserIdOrderByCreatedAtDesc(String userId);
 }

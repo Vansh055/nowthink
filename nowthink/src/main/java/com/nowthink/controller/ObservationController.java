@@ -7,6 +7,8 @@ import com.nowthink.service.ThoughtEvolutionEngine;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +18,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/observe")
-@CrossOrigin(origins = "*")
+@CrossOrigin(originPatterns = "*", allowCredentials = "true")
 public class ObservationController {
 
     private static final Logger log = LoggerFactory.getLogger(ObservationController.class);
@@ -54,7 +56,13 @@ public class ObservationController {
     }
 
     @PostMapping
-    public ResponseEntity<?> addObservation(@RequestBody String rawText) {
+    public ResponseEntity<?> addObservation(@RequestBody String rawText,
+                                            @AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        }
+        String userId = principal.getAttribute("sub");
+
         try {
             if (rawText == null || rawText.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Observation cannot be empty"));
@@ -62,14 +70,10 @@ public class ObservationController {
 
             String theme = "Unnamed observation";
             try {
-                log.info("Calling extractor AI for: {}", rawText.substring(0, Math.min(50, rawText.length())));
                 String result = extractorClient.prompt().user(rawText).call().content().trim();
-                log.info("Extractor returned: {}", result);
-                if (result != null && !result.isEmpty()) {
-                    theme = result;
-                }
+                if (result != null && !result.isEmpty()) theme = result;
             } catch (Exception e) {
-                log.error("Extractor AI failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+                log.error("Extractor AI failed: {}", e.getMessage());
             }
 
             int energy = 5;
@@ -81,10 +85,11 @@ public class ObservationController {
                     energy = Math.min(10, Math.max(1, energy));
                 }
             } catch (Exception e) {
-                log.error("Energy AI failed: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+                log.error("Energy AI failed: {}", e.getMessage());
             }
 
             Observation obs = new Observation();
+            obs.setUserId(userId);
             obs.setRawText(rawText.trim());
             obs.setExtractedTheme(theme);
             obs.setEnergyScore(energy);
@@ -92,19 +97,13 @@ public class ObservationController {
 
             final Observation savedObs = obs;
             new Thread(() -> {
-                try {
-                    contradictionEngine.checkAndUpdate(savedObs);
-                } catch (Exception e) {
-                    log.error("Contradiction engine error: {}", e.getMessage());
-                }
-                try {
-                    thoughtEvolutionEngine.extractAndStore(savedObs);
-                } catch (Exception e) {
-                    log.error("Thought evolution engine error: {}", e.getMessage());
-                }
+                try { contradictionEngine.checkAndUpdate(savedObs, userId); }
+                catch (Exception e) { log.error("Contradiction error: {}", e.getMessage()); }
+                try { thoughtEvolutionEngine.extractAndStore(savedObs, userId); }
+                catch (Exception e) { log.error("Evolution error: {}", e.getMessage()); }
             }).start();
 
-            long count = observationRepository.count();
+            long count = observationRepository.countByUserId(userId);
 
             return ResponseEntity.ok(Map.of(
                     "id", obs.getId(),
@@ -121,7 +120,11 @@ public class ObservationController {
     }
 
     @GetMapping
-    public List<Observation> getAllObservations() {
-        return observationRepository.findAllByOrderByCreatedAtDesc();
+    public ResponseEntity<?> getAllObservations(@AuthenticationPrincipal OAuth2User principal) {
+        if (principal == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        }
+        String userId = principal.getAttribute("sub");
+        return ResponseEntity.ok(observationRepository.findByUserIdOrderByCreatedAtDesc(userId));
     }
 }
