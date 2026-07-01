@@ -25,11 +25,11 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
-                        .defaultSuccessUrl("/api/auth/success", true)
-                        .failureUrl("/api/auth/failure")
+                        .defaultSuccessUrl("https://nowthink-frontend.vercel.app", true)
+                        .failureUrl("https://nowthink-frontend.vercel.app?error=true")
                 )
                 .logout(logout -> logout
-                        .logoutSuccessUrl("/api/auth/logout-success")
+                        .logoutSuccessUrl("https://nowthink-frontend.vercel.app")
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)
                 );
