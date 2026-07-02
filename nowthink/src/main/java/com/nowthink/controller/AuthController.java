@@ -1,11 +1,14 @@
 package com.nowthink.controller;
 
+import com.nowthink.config.NowthinkUserPrincipal;
 import com.nowthink.model.User;
 import com.nowthink.repository.UserRepository;
+import com.nowthink.service.JwtService;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.ResponseEntity;
+
 import java.util.Map;
 
 @RestController
@@ -14,16 +17,18 @@ import java.util.Map;
 public class AuthController {
 
     private final UserRepository userRepository;
+    private final JwtService jwtService;
 
-    public AuthController(UserRepository userRepository) {
+    public AuthController(UserRepository userRepository, JwtService jwtService) {
         this.userRepository = userRepository;
+        this.jwtService = jwtService;
     }
 
-    @GetMapping("/success")
-    public ResponseEntity<?> loginSuccess(@AuthenticationPrincipal OAuth2User principal) {
-        if (principal == null) {
-            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        }
+    @GetMapping("/oauth-success")
+    public void oauthSuccess(@AuthenticationPrincipal OAuth2User principal,
+                             jakarta.servlet.http.HttpServletResponse response)
+            throws java.io.IOException {
+
         String googleId = principal.getAttribute("sub");
         String email = principal.getAttribute("email");
         String name = principal.getAttribute("name");
@@ -38,21 +43,16 @@ public class AuthController {
             return userRepository.save(newUser);
         });
 
-        return ResponseEntity.ok(Map.of(
-                "id", user.getId(),
-                "name", user.getName(),
-                "email", user.getEmail(),
-                "picture", user.getPicture() != null ? user.getPicture() : ""
-        ));
+        String token = jwtService.generateToken(googleId, email, name);
+        response.sendRedirect("https://nowthink-frontend.vercel.app?token=" + token);
     }
 
     @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<?> getCurrentUser(@AuthenticationPrincipal NowthinkUserPrincipal principal) {
         if (principal == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
         }
-        String googleId = principal.getAttribute("sub");
-        return userRepository.findByGoogleId(googleId)
+        return userRepository.findByGoogleId(principal.getUserId())
                 .map(user -> ResponseEntity.ok(Map.of(
                         "id", user.getId(),
                         "name", user.getName(),
@@ -60,15 +60,5 @@ public class AuthController {
                         "picture", user.getPicture() != null ? user.getPicture() : ""
                 )))
                 .orElse(ResponseEntity.status(404).build());
-    }
-
-    @GetMapping("/logout-success")
-    public ResponseEntity<?> logoutSuccess() {
-        return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
-    }
-
-    @GetMapping("/failure")
-    public ResponseEntity<?> loginFailure() {
-        return ResponseEntity.status(401).body(Map.of("error", "Login failed"));
     }
 }

@@ -1,10 +1,9 @@
 package com.nowthink.controller;
 
-import com.nowthink.model.ThoughtEvolution;
+import com.nowthink.config.NowthinkUserPrincipal;
 import com.nowthink.service.ThoughtEvolutionEngine;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,22 +21,16 @@ public class ThoughtEvolutionController {
     }
 
     @GetMapping
-    public ResponseEntity<?> getAllEvolutions(@AuthenticationPrincipal OAuth2User principal) {
-        if (principal == null) {
-            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        }
-        String userId = principal.getAttribute("sub");
-        return ResponseEntity.ok(evolutionEngine.getAllEvolutions(userId));
+    public ResponseEntity<?> getAllEvolutions(@AuthenticationPrincipal NowthinkUserPrincipal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        return ResponseEntity.ok(evolutionEngine.getAllEvolutions(principal.getUserId()));
     }
 
     @GetMapping("/{theme}")
     public ResponseEntity<?> getByTheme(@PathVariable String theme,
-                                        @AuthenticationPrincipal OAuth2User principal) {
-        if (principal == null) {
-            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-        }
-        String userId = principal.getAttribute("sub");
-        return ResponseEntity.ok(evolutionEngine.getEvolutionByTheme(userId, theme));
+                                        @AuthenticationPrincipal NowthinkUserPrincipal principal) {
+        if (principal == null) return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        return ResponseEntity.ok(evolutionEngine.getEvolutionByTheme(principal.getUserId(), theme));
     }
 
     @GetMapping("/themes")
